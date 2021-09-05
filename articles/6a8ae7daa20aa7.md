@@ -1,6 +1,6 @@
 ---
 title: "Goのsliceのcapacityはどのように増加していくか"
-emoji: "🐥"
+emoji: "🗄️"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["go", "golang", "言語仕様"]
 published: false
@@ -55,10 +55,12 @@ type slice struct {
 上記のsliceの構造を前提として、`capacity`と`length`が何であるかを指しましょう。
 一言で言ってしまえば、
 
-```
+`
 capacity: sliceが参照しているunderlying arrayの容量
+`
+`
 length: sliceが参照しているunderlying arrayに入っている要素の数
-```
+`
 
 ということになります。
 
@@ -108,16 +110,20 @@ lengthが2になるまではただlengthが増えていくだけで他は変わ�
 
 ## 検証2: sliceのcapacityは実際にどのように増えるか
 
-前項のようにunderlying arrayを新しく確保することで、sliceのcapacityは増加するわけですが、その増え方はどのようになっているのでしょうか。
+前項で確認したように、underlying arrayを新しく確保することでsliceのcapacityは増加するわけですが、その増え方は実際にどのようになっているのでしょうか。
 
-以下のようなコードで試して見ましょう
+以下のようなコードで試してみましょう。
 
 TODO: playgroundをはる
 
 実行結果から、以下のようなことがわかります。
 
-- Capacityが1024になるまでは、２倍で増えていく
-- 1024を超えてから、増加率が低くなる
+`
+capacityが1024になるまでは、2倍で増えていく
+`
+`
+1024を超えてから、増加率が低くなる
+`
 
 さらに、以下のように、いろんなelementのtypeでも実行してみましょう。
 
@@ -125,26 +131,30 @@ TODO: playgroundをはる
 
 長いのですべては貼りきれませんが、上記の実行結果から、
 
-- sliceのelementのtypeによって、1024を超えてからのcapacityの増え方には違いがある
+`
+sliceのelementのtypeによって、1024を超えてからのcapacityの増え方には違いがある
+`
 
 ということもわかります。
 
 さらに、それぞれの結果をよく見比べると、
 
-- sliceのelementのtypeによっては、違うtype同士でも1024を超えてからのcapacityの増え方が同じものもある
+`
+sliceのelementのtypeによっては、違うtype同士でも1024を超えてからのcapacityの増え方が同じものもある
+`
 
 ということもわかります。これは、例えば、boolとbyte、int32とfloat32, int64とfloat64などを見比べるとわかります。
 
 あらためてまとめると、下記の3点の特徴がわかったので、次項で内部実装を追いかけてそれらの根拠を探ってみましょう。
 
-- Capacityが1024になるまでは、２倍で増えていく
+- capacityが1024になるまでは、2倍で増えていく
 - 1024を超えてから、増加率が低くなる
 - sliceのelementのtypeによって、1024を超えてからのcapacityの増え方には違いがある(ただし、違うtype同士でも増え方が同じものもある)
 
 ### 実際の内部実装
 
 上記について、実際の実装を追いながら確認していきましょう。
-runtimeパッケージのgrowsliceという関数を見ていきます。
+runtimeパッケージの`growslice`という関数を見ていきます。
 
 #### IO
 
@@ -169,10 +179,11 @@ runtimeパッケージのgrowsliceという関数を見ていきます。
 3. 新しいcapacityに合わせて、新しいunderlying arrayのメモリを確保し、古いunderlying arrayから要素を移動させる。
 
 
-## 結論
+## まとめ
 
 ## 参考
 
 [Go Slices: usage and internals](https://go.dev/blog/slices-intro)
 [Arrays, slices (and strings): The mechanics of 'append'](https://go.dev/blog/slices#TOC_9.)
 [Go slice ベストプラクティス](https://qiita.com/imoty/items/bb18fb50d526474d2d10)
+[The Go Programming Language Specification - Conversions from slice to array pointer](https://golang.org/ref/spec#Conversions_from_slice_to_array_pointer)
