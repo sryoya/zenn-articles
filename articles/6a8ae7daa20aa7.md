@@ -365,6 +365,10 @@ return slice{p, old.len, newcap}
 
 ## まとめ
 
+以上で、sliceのcapacityが足りなくなったときに、内部でどのような処理が行われているか、そして実際にどのようにcapacityが増加していくかのイメージが掴めたかと思います。
+`append`が内部で自動でやってくれるので、普段sliceを使っているときは意識しなくてもcapacityは勝手に増えていくわけですが、このように新しくunderlying arrayやsliceを作り直して、メモリも確保し直す処理が行われているのでした。
+これらを意識しておくと、sliceを最初に作成するときに、(必要なcapacityの見当がつく時は)はじめからcapacityを用意しておく意義もわかると思います。
+
 ## 参考
 
 [Go Slices: usage and internals](https://go.dev/blog/slices-intro)
