@@ -17,7 +17,7 @@ sliceのcapacityを増加させるときは、underlying array(基底配列)を�
 capacityを増やす際の、新しいcapacityの計算方法は下記の通り。
 
 1. 新しいcapacity(仮)を決める。元のcapacityが1024未満なら元のcapacityの2倍、1024以上なら1.25倍する。
-2. 1の計算結果から、実際に確保するメモリ容量を計算する。メモリ容量はsliceの要素のtypeにも依存する。
+2. 1の計算結果から、実際に確保するメモリ容量を計算する。メモリ容量はsliceの要素のtypeやメモリブロックの単位にも依存する。
 3. 2で計算したメモリ容量から、最終的なcapacityを計算する。
 
 ## 前提: sliceの構造とcapacity
@@ -68,17 +68,11 @@ length: sliceが参照しているunderlying arrayに入っている要素の数
 ## 検証1 capacityが増えるときにsliceにはどのような変更がなされるか
 
 ここまでの説明のようにsliceが内部でarrayを参照していることになると、sliceにcapacityを超える数の要素を入れたらどうなるのかという疑問が湧くことになると思います。
-結論を言うと、underlying arrayの長さをそのまま後から変えることはできないので、`underlying arrayを新しく確保してpointerを貼り直している`ということになります。
+結論から、underlying arrayの長さをそのまま後から変えることはできないので、`underlying arrayを新しく確保してpointerを貼り直している`ということになります。
 
 それを実際に下記のコードで検証してみましょう。
 
 ```go
-package main
-
-import (
-	"fmt"
-)
-
 func main() {
 	s := make([]int, 0, 2)
 	fmt.Printf("slice: %p, cap:%v , len: %v, underlying array:%p\n", &s, cap(s), len(s), (*[0]int)(s))
@@ -110,16 +104,55 @@ lengthが2になるまではただlengthが増えていくだけで他は変わ�
 
 ## 検証2: sliceのcapacityは実際にどのように増えるか
 
-前項で確認したように、underlying arrayを新しく確保することでsliceのcapacityは増加するわけですが、その増え方は実際にどのようになっているのでしょうか。
+前述のように、underlying arrayを新しく確保することでsliceのcapacityは増加するわけですが、その増え方は実際にどのようになっているのでしょうか。
 
 以下のようなコードで試してみましょう。
 
-TODO: 奇数のcapacityを試す
+```go
+func main() {
+	s1 := []int32{1}
+	fmt.Printf("cap:%v , len: %v\n", cap(s1), len(s1))
+	s1 = append(s1, 1)
+	fmt.Printf("cap:%v , len: %v\n", cap(s1), len(s1))
+
+	fmt.Println()
+
+	s2 := []int32{1, 1}
+	fmt.Printf("cap:%v , len: %v\n", cap(s2), len(s2))
+	s2 = append(s2, 1)
+	fmt.Printf("cap:%v , len: %v\n", cap(s2), len(s2))
+
+	fmt.Println()
+
+	s3 := []int32{1, 1, 1, 1, 1, 1, 1, 1, 1}
+	fmt.Printf("cap:%v , len: %v\n", cap(s3), len(s3))
+	s3 = append(s3, 1)
+	fmt.Printf("cap:%v , len: %v\n", cap(s3), len(s3))
+}
+```
+
+[The Go Playground](https://play.golang.org/p/uYjKx5l1k6u)
+
+実行すると、下記のようになります。
+
+```
+cap:1 , len: 1
+cap:2 , len: 2
+
+cap:2 , len: 2
+cap:4 , len: 3
+
+cap:9 , len: 9
+cap:20 , len: 10
+```
+
+最初の二つは、capが1のときは2, 2のときは4と、2倍になっています。
+一方で三つ目は、capが9から20へと増えていて、ちょうど2倍にはなっていません。
 
 ご覧のように、capacityは、必ずしも要素を追加する際に必要な数だけ増えるわけではありません。
-さらに、capacityが2のときは4になりましたが、3のときは5, 4のときは8など、増加涼・率ともに一定ではありません。
+そして、増加涼・率ともに必ずしも一定ではありません。
 
-そこで、sliceに要素を一つずつ追加していって、capacityが増加の遷移と増加率を見てみましょう。
+そこで、sliceに要素を一つずつ追加していって、capacityが増加の遷移と増加率をもっと見てみましょう。
 
 [The Go Playground](https://play.golang.org/p/naLirWxB1yT)
 
