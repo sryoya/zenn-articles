@@ -1,5 +1,5 @@
 ---
-title: "Goのsliceのcapacityはどのように増加していくか"
+title: "Sliceのcapacityはどのように増加していくか"
 emoji: "🗄️"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["go", "golang", "言語仕様"]
@@ -11,12 +11,12 @@ published: false
 Goのsliceには容量(capacity)があります。このcapacityは、sliceに要素が追加されて足りなくなった際に、自動で増加するようになっています。
 この記事では、以下の二点を検証していきます。
 
-1. **capacityが増加した際にslice内部でどのような変更が行われているか**
-2. **capacityがどのような規則で増加いくか**
+1. **capacityが増加する際にslice内部でどのような変更が行われているか**
+2. **capacity数がどのような規則で増加するか**
 
 ## 結論だけ知りたい人用のまとめ
 
-sliceのcapacityを増加させるときは、underlying array(基底配列)を新しいcapacityで確保し直してポイントを貼り直している。
+sliceのcapacityを増加させるときは、underlying arrayを新しいcapacityで確保し直してポイントを貼り直している。
 capacityを増やす際の、新しいcapacityの計算方法は下記の通り。
 
 1. 新しいcapacity(仮)を決める。元のcapacityが1024未満なら元のcapacityの2倍、1024以上なら1.25倍する。
@@ -41,10 +41,10 @@ type slice struct {
 ```
 
 ご覧のように、sliceは内部にarrayへのpointerを持っています。
-つまり、sliceというのは、別にarrayを用意して、そこへの参照を持ったものになります。
-このsliceが参照しているarrayのことを、`underlying array (基底配列)`と呼んだりします。
+つまり、sliceは、別に存在しているarrayへの参照を持ったものということになります。
+このsliceが参照しているarrayのことを、`underlying array (基底配列)`と呼びます。
 
-なので、例えば、長さが5のbyteのsliceを作成した場合は、下記のように、長さが5のbyteのarrayを内部で作成し、そちらを参照している状態になります。
+なので、例えば、capacityとlengthが5のbyteのsliceを作成した場合は、下記のように、長さが5のbyteのarrayを内部で作成し、そちらを参照している状態になります。
 
 ![slice and array relation](https://go.dev/blog/slices-intro/slice-1.png "slice and array relation")
 
@@ -55,26 +55,24 @@ type slice struct {
 
 ### lengthとcapacity
 
-上記のsliceの構造を前提として、`capacity`と`length`が何であるかを指しましょう。
+上記のsliceの構造を前提として、`capacity`と`length`が何であるかを定義しておきます。
 一言で言ってしまえば、
 
-`
-capacity: sliceが参照しているunderlying arrayの容量
-`
-`
-length: sliceが参照しているunderlying arrayに入っている要素の数
-`
+**capacity: underlying arrayの容量**
+
+**length: underlying arrayに入っている要素の数**
 
 ということになります。
 
+## 検証1: capacityが増加する際にslice内部でどのような変更が行われているか
 
-## 検証1: capacityが増えるときにsliceにはどのような変更がなされるか
+ここまでの説明のようにsliceが内部で固定長のarrayを参照していることになると、sliceにcapacityを超える数の要素を入れたら内部のarrayはどうなるのかという疑問が湧くと思います。
+この項では、そちらを検証します。
 
-ここまでの説明のようにsliceが内部でarrayを参照していることになると、sliceにcapacityを超える数の要素を入れたらどうなるのかという疑問が湧くことになると思います。
-結論から言うと、underlying arrayの長さをそのまま後から変えることはできないので、`underlying arrayを新しく確保してpointerを貼り直している`ということになります。
+結論から言うと、underlying arrayの長さをそのまま後から変えることはできないので、**underlying arrayを新しく確保してpointerを貼り直している**ということになります。
 
 実際に下記のコードで検証してみましょう。
-このコードは、sliceの情報やunderlying arrayのポインタを出力して、要素を増やすごとにどうなるかを確認しています。
+このコードは、要素を一つずつ追加するごとに、sliceの情報やunderlying arrayのポインタを出力しています。
 
 ```go
 func main() {
@@ -101,12 +99,13 @@ slice: 0xc00000c030, cap:4 , len: 3, underlying array:0xc00007a000
 ```
 
 出力内容は、順番に、`sliceのポインタ`、`capacity`, `length`, `underlying arrayのポインタ`です。
+(なお、underlying arrayのポインタは、[Go1.17で追加された方法](https://golang.org/ref/spec#Conversions_from_slice_to_array_pointer)を利用して取得しています。)
 最初にcapcityが2のsliceを作成し、一つずつ要素を足していって、それぞれの値がどのように変化していくかを出力しています。
 lengthが2になるまではただlengthが増えていくだけで他は変わりないですが、capcityが足りなくなったタイミングで、capacityが2から4に増加しています。
-そして、それと同時に、underlying arrayのポインタが変更されています。
+そして、それと同時に、**underlying arrayのポインタが変更されています**。
 つまり、このタイミングで、capacityを増やすために、underlying arrayが確保し直されていることになります。
 
-## 検証2: sliceのcapacityは実際にどのように増えるか
+## 検証2: capacity数がどのような規則で増加するか
 
 ここまでで、sliceのcapacityが増えるときは、underlying arrayを新しく確保していることを確認しました。
 次に、capacity数がどのように増えるかを見てみましょう。
@@ -151,18 +150,57 @@ cap:9 , len: 9
 cap:20 , len: 10
 ```
 
-最初の二つは、capが1だった2, 2だったときは4と、2倍になっています。
-一方で三つ目は、capが9だったものが20へと増えていて、ちょうど2倍にはなっていません。
+最初の二つは、capが1だったときは2, 2だったときは4と、2倍になっています。
+ところが、三つ目では、capが9だったものが20へと増えていて、ちょうど2倍にはなっていません。
 
 ご覧のように、capacityは、必ずしも要素を追加する際に必要な数だけ増えるわけではありません。
 そして、増加量・率ともに必ずしも一定ではありません。
 
-そこで、sliceに要素を一つずつ追加していって、capacityが増加の遷移と増加率をもっと見てみましょう。
+そこで、sliceに要素を一つ繰り返し追加していって、capacity数と増加率の遷移をもっと見てみましょう。
 
-TODO: コードの抜粋をはる
+```go
+func main() {
+	var s []int
+	var currCap int
+	for i := 0; i < 10000; i++ {
+		s = append(s, i)
+		newCap := cap(s)
+		if currCap != newCap {
+			fmt.Printf("new cap %v, (new cap) / (old cap) = %v \n", newCap, float32(newCap)/float32(currCap))
+			currCap = newCap
+		}
+	}
+}
+```
+
 [The Go Playground](https://play.golang.org/p/naLirWxB1yT)
 
-実行結果から、以下のようなことがわかります。
+PlayGroundで実行すると、下記のような結果が得られます。
+
+```
+new cap 1, (new cap) / (old cap) = +Inf 
+new cap 2, (new cap) / (old cap) = 2 
+new cap 4, (new cap) / (old cap) = 2 
+new cap 8, (new cap) / (old cap) = 2 
+new cap 16, (new cap) / (old cap) = 2 
+new cap 32, (new cap) / (old cap) = 2 
+new cap 64, (new cap) / (old cap) = 2 
+new cap 128, (new cap) / (old cap) = 2 
+new cap 256, (new cap) / (old cap) = 2 
+new cap 512, (new cap) / (old cap) = 2 
+new cap 1024, (new cap) / (old cap) = 2 
+new cap 1280, (new cap) / (old cap) = 1.25 
+new cap 1696, (new cap) / (old cap) = 1.325 
+new cap 2304, (new cap) / (old cap) = 1.3584906 
+new cap 3072, (new cap) / (old cap) = 1.3333334 
+new cap 4096, (new cap) / (old cap) = 1.3333334 
+new cap 5120, (new cap) / (old cap) = 1.25 
+new cap 7168, (new cap) / (old cap) = 1.4 
+new cap 9216, (new cap) / (old cap) = 1.2857143 
+new cap 12288, (new cap) / (old cap) = 1.3333334 
+```
+
+上記の結果から、以下のようなことがわかります。
 
 ・**capacityが1024になるまでは、2倍で増えていく**
 
@@ -170,9 +208,117 @@ TODO: コードの抜粋をはる
 
 さらに、以下のように、いろんなelementのtypeでも実行してみましょう。
 
-TODO: playgroundをはる
+```go
+func main() {
+	fmt.Println("--in32---")
+	var int32s []int32
+	var currCap int
+	for i := 0; i < 100000; i++ {
+		int32s = append(int32s, int32(i))
+		newCap := cap(int32s)
+		if currCap != newCap {
+			fmt.Printf("new cap %v, (new cap) / (old cap) = %v \n", newCap, float32(newCap)/float32(currCap))
+			currCap = newCap
+		}
+	}
 
-長いのですべては貼りきれませんが、上記の実行結果から、
+	fmt.Println()
+	fmt.Println("--int64---")
+	var int64s []int64
+	currCap = 0
+	for i := 0; i < 100000; i++ {
+		int64s = append(int64s, int64(i))
+		newCap := cap(int64s)
+		if currCap != newCap {
+			fmt.Printf("new cap %v, (new cap) / (old cap) = %v \n", newCap, float32(newCap)/float32(currCap))
+			currCap = newCap
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("--float32---")
+	var f32s []float32
+	currCap = 0
+	for i := 0; i < 100000; i++ {
+		f32s = append(f32s, float32(i))
+		newCap := cap(f32s)
+		if currCap != newCap {
+			fmt.Printf("new cap %v, (new cap) / (old cap) = %v \n", newCap, float32(newCap)/float32(currCap))
+			currCap = newCap
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("--float64---")
+	var f64s []float64
+	currCap = 0
+	for i := 0; i < 100000; i++ {
+		f64s = append(f64s, float64(i))
+		newCap := cap(f64s)
+		if currCap != newCap {
+			fmt.Printf("new cap %v, (new cap) / (old cap) = %v \n", newCap, float32(newCap)/float32(currCap))
+			currCap = newCap
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("--string---")
+	var strs []string
+	currCap = 0
+	for i := 0; i < 100000; i++ {
+		strs = append(strs, "hello")
+		newCap := cap(strs)
+		if currCap != newCap {
+			fmt.Printf("new cap %v, (new cap) / (old cap) = %v \n", newCap, float32(newCap)/float32(currCap))
+			currCap = newCap
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("--byte---")
+	var bytes []byte
+	currCap = 0
+	for i := 0; i < 100000; i++ {
+		bytes = append(bytes, 0x00)
+		newCap := cap(bytes)
+		if currCap != newCap {
+			fmt.Printf("new cap %v, (new cap) / (old cap) = %v \n", newCap, float32(newCap)/float32(currCap))
+			currCap = newCap
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("--bool---")
+	var bools []bool
+	currCap = 0
+	for i := 0; i < 100000; i++ {
+		bools = append(bools, true)
+		newCap := cap(bools)
+		if currCap != newCap {
+			fmt.Printf("new cap %v, (new cap) / (old cap) = %v \n", newCap, float32(newCap)/float32(currCap))
+			currCap = newCap
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("--interface---")
+	var ifs []interface{}
+	currCap = 0
+	for i := 0; i < 100000; i++ {
+		ifs = append(ifs, true)
+		newCap := cap(ifs)
+		if currCap != newCap {
+			fmt.Printf("new cap %v, (new cap) / (old cap) = %v \n", newCap, float32(newCap)/float32(currCap))
+			currCap = newCap
+		}
+	}
+}
+
+```
+
+[The Go PlayGround](https://play.golang.org/p/AltgNpGFgEJ)
+
+実行結果は長いのでここには貼りませんが(ぜひPlayGroundで試してみてください)、実行してみると、
 
 - **sliceのelementのtypeによって、1024を超えてからのcapacityの増え方には違いがある**
 
@@ -207,6 +353,7 @@ IOと挙動の概要はコメントに書いてあります。
 // It is passed the slice element type, the old slice, and the desired new minimum capacity,
 // and it returns a new slice with at least that capacity, with the old data
 // copied into it.
+func growslice(et *_type, old slice, cap int) slice {
 ```
 
 コメントの通り、inputとして、sliceの要素のtype, (拡張前の)slice, 必要なcapを受け取るようです。
@@ -215,18 +362,9 @@ IOと挙動の概要はコメントに書いてあります。
 一点注目する点として、説明にある通り、この関数は、`新しいslice`を作って返してくれるようです。
 つまり、「検証1」で試した結果では、capacityが増えてもsliceのポインタはそのままでしたが、あくまでポインタがそのままなだけで、slice自体は新しいもので置き換えているようです。
 
-#### IO
-
-関数のIOはこのようになっています。
-コメントの通り、sliceの要素のtype, (拡張前の)slice, 必要なcapの順番でparameterを受け取っているようです。
-
-```go
-func growslice(et *_type, old slice, cap int) slice {
-```
-
 #### 流れ
 
-細かい例外処理を省くと、この`growslice`は、ざっくり3つの処理に分かられそうです。
+細かい例外処理を省くと、この`growslice`は、ざっくり3つの処理に分けられそうです。
 
 1. 仮決めのcapacityを設定する
 
@@ -266,7 +404,7 @@ if cap > doublecap {
 この部分は、順番に読んでいけば、比較的わかりやすそうです。
 順番に見ていくと、仮決めのcapacityの決め方は、
 
-1. 必要なcapcityが、現状のcapacityの2倍以上だったら、必要とされているcapacityを採用する
+1. 必要なcapcityが現状のcapacityの2倍以上だったら、必要とされているcapacityを採用する
 2. 現状のcapacityが1024未満だったら、現状のcapacityを2倍したものを採用する
 3. 現状のcapacityが1024以上だったら、現状のcapacityを2倍したものを採用する
 4. 3のパターンの実行結果で決まった仮決めのcapacityが0以下だったら(コメント曰くoverflowしたとき用？)、必要とされているcapacityを採用する
@@ -328,7 +466,7 @@ default:
 (これらは、`uintptr`というGoの組み込み型のtypeで表現されています。`uintptr`は、ポインタを格納できる整数型です。)
 
 そして、sliceの要素のtypeのサイズに応じて、決め方が少しづつ異なるようです。
-細かく見ると、シフトが行われていたりややこしいですが、やっていることは基本的に同じです。
+細かく見ると、シフトが行われていたりややこしい部分もありますですが、やっていることは基本的に同じで、下記の通りです。
 
 まず、新しいunderlying arrayのためにメモリを確保するために、メモリ容量を決めます。
 さらに、そのunderlying arrayに古いsliceに、すでに入っている要素をコピーする必要があるので、そのためのメモリ容量(また要素をまだ入れない容量も)決める必要があるので、それぞれ計算しています。
@@ -359,25 +497,30 @@ func roundupsize(size uintptr) uintptr {
 }
 ```
 
-コメントにあるように、この関数は、実際のメモリブロックの単位に合わせて、確保すべきメモリ容量を調整してくれています。
-細かい説明はここでは割愛しますが、これは、`TCMalloc` というメモリアロケータに合わせたものです。
-この`TCMalloc`は、格納するデータのサイズに応じて、格納するべきメモリの単位（クラスという）を指定しているので、その規定に合うような実際に確保するメモリ容量を切り上げて調整しています。
+コメントにあるように、この関数は、実際のメモリブロックの単位に合わせて、確保するメモリ容量の切り上げを行っています。
+これは、[`TCMalloc`](https://google.github.io/tcmalloc/design.html) というメモリアロケータの仕様に合わせたものです。
+細かい説明はここでは割愛しますが、この`TCMalloc`は、格納するデータのサイズに応じて、確保するべきメモリの単位（クラスという）を指定しているので、その規定に合うように実際に確保するメモリ容量を切り上げて調整しています。
+最終的なcapacityの増加率が必ず2倍または1.25倍にならない理由は、この処理に起因するようです。
 
-TODO: mallocのクラスの図を貼って解説
+元のコードに戻ります。
+最後に、切り上げを行ったメモリ容量から、capacityを計算し直しています。
+こちらのコードのように、メモリ容量から、要素の数であるcapacityを計算しています。
 
-このようにしてメモリ容量を決めています。
-そして、最後に、計算したメモリ容量から、実際に入れられる要素の数であるcapacityを計算し直しています。
+```go
+newcap = int(capmem / et.size)
+```
 
 これで、以下の特徴の理由がわかったと思います。
 
 - 増加率は一定ではない
 - sliceのelementのtypeによって、capacityの増え方には違いがある(ただし、違うtype同士でも増え方が同じものもある)
 
-最終的なcapacityは、sliceの要素のサイズを考慮してメモリ容量に基づいていて、かつメモリ容量がメモリアロケータの仕様に合わせて最適化されているので、上記のような特徴となるということです。
+最終的なcapacityは、sliceの要素のサイズを考慮したメモリ容量に基づいていて、かつメモリ容量がメモリアロケータの仕様に合わせて最適化されるので、上記のような特徴となるということです。
 
 ##### 3. 新しいcapacityに合わせて、新しいunderlying arrayのメモリを確保し、古いunderlying arrayから要素を移動させる
 
-すでにcapacityの決まり方はわかりましたが、実際に決まったcapacityとメモリ容量を使ってどのような処理をしているかを、残りのコードを見て確認していきましょう。
+すでにcapacityの決まり方はわかりましたが、残りのコードも簡単に確認していきましょう。
+こちらは、実際に計算されたメモリ容量などを使って、実際に新しいsliceを作成する処理になります。
 
 ```go
 var p unsafe.Pointer
@@ -400,15 +543,14 @@ memmove(p, old.array, lenmem)
 return slice{p, old.len, newcap}
 ```
 
-こちらは、決まったメモリ容量に応じて、メモリを実際に確保して、すでにsliceに入っている要素を移動させているようです。
-詳細は省略しますが、先述のように`TCMalloc`を利用して新しいunderlying arrayのメモリを確保して、最後の`memmove`で古いunderlying arrayをそこに移動させています。
+詳細は省略しますが、`TCMalloc`を利用して新しいunderlying arrayのメモリを確保して、最後の`memmove`で古いunderlying arrayをそこに移動させています。
 そして、最後に、新しいunderlying arrayへのポインタを持ったsliceを新規に作成しています。
 
 ## まとめ
 
 以上で、sliceのcapacityが足りなくなったときに、内部でどのような処理が行われているか、そして実際にどのようにcapacityが増加していくかのイメージが掴めたかと思います。
-`append`が内部で自動でやってくれるので、普段sliceを使っているときは意識しなくてもcapacityは勝手に増えていくわけですが、このように新しくunderlying arrayやsliceを作り直して、メモリも確保し直す処理が行われているのでした。
-これらを意識しておくと、sliceを最初に作成するときに、パフォーマンス観点から、(必要なcapacityの見当がつく時は)はじめからcapacityを用意しておく意義もわかると思います。
+`append`が内部で自動でやってくれるので、普段sliceを使っているときは意識しなくてもcapacityは勝手に増えていくわけですが、このように新しくメモリを確保してunderlying arrayを作り直して、sliceを作り直しているのでした。
+これらを意識しておくと、sliceを最初に作成するときに、パフォーマンスの観点から、(必要なcapacityの見当がつく時は)はじめからcapacityを用意しておく意義もわかると思います。
 
 ## 参考
 
