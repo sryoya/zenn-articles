@@ -1,9 +1,9 @@
 ---
 title: "Sliceのcapacityはどのように増加していくか"
 emoji: "🗄️"
-type: "tech" # tech: 技術記事 / idea: アイデア
+type: "tech"
 topics: ["go", "golang", "言語仕様"]
-published: false
+published: true
 ---
 
 ## 概要
